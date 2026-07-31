@@ -161,7 +161,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    // TODO : ensure that the gpu copy of x_new has the up to date values that were just created
+    // Host wrote the initial condition; mirror it to the device before the time loop.
     x_new.update_device();
 
     flops_bc = 0;

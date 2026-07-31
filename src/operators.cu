@@ -28,7 +28,7 @@ struct DiffusionParams {
     double *bndW;
 };
 
-// TODO : explain what the params variable and setup_params_on_device() do
+// Device-side mesh parameters (copied once via cudaMemcpyToSymbol for kernel use).
 __device__
 DiffusionParams params;
 
@@ -130,33 +130,20 @@ namespace kernels {
     // stencil implemented with a 1D launch configuration
     __global__
      void stencil_interior_1D(double* S, const double *U) {
-         // TODO : implement the interior stencil
-         // EXTRA : can you make it use shared memory?
-         //  S(i,j) = -(4. + alpha) * U(i,j)               // central point
-         //                          + U(i-1,j) + U(i+1,j) // east and west
-         //                          + U(i,j-1) + U(i,j+1) // north and south
-         //                          + alpha * x_old(i,j)
-         //                          + dxs * U(i,j) * (1.0 - U(i,j));
-
-         auto j = threadIdx.x + blockDim.x*blockIdx.x;
-
+         // 1D launch alternative: one thread per row j, loops over interior i.
+         auto j = threadIdx.x + blockDim.x * blockIdx.x;
          auto nx = params.nx;
          auto ny = params.ny;
          auto alpha = params.alpha;
          auto dxs = params.dxs;
 
-         auto find_pos = [&nx] (size_t i, size_t j) {
-             return i + j * nx;
-         };
-
-         if(j > 0 && j < ny)
-         {
-             for (int i = 1; i < nx; i++)
-             {
-                 auto pos = find_pos(i, j);
+         if (j > 0 && j < ny - 1) {
+             for (int i = 1; i < nx - 1; ++i) {
+                 auto pos = i + j * nx;
                  S[pos] = -(4. + alpha) * U[pos]
-                         + U[pos-1] + U[pos-nx] + U[pos+nx]
-                         + U[pos+1] + alpha*params.x_old[pos]
+                         + U[pos - 1] + U[pos + 1]
+                         + U[pos - nx] + U[pos + nx]
+                         + alpha * params.x_old[pos]
                          + dxs * U[pos] * (1.0 - U[pos]);
              }
          }
@@ -183,7 +170,6 @@ namespace kernels {
                         + alpha*params.x_old[pos] + params.bndE[j]
                         + dxs * U[pos] * (1.0 - U[pos]);
 
-            // TODO : do the stencil on the WEST side
             // WEST : i = 0
             pos = find_pos(0, j);
             S[pos] = -(4. + alpha) * U[pos]
@@ -210,7 +196,6 @@ namespace kernels {
                         + alpha*params.x_old[pos] + params.bndN[i]
                         + dxs * U[pos] * (1.0 - U[pos]);
 
-            // TODO : do the stencil on the SOUTH side
             // SOUTH : j = 0
             pos = i;
             S[pos] = -(4. + alpha) * U[pos]
@@ -300,14 +285,13 @@ void diffusion(data::Field const& U, data::Field &S)
         is_initialized = true;
     }
 
-    // apply stencil to the interior grid points
-    // TODO: what is the purpose of the following?
+    // Ceiling division for launch configuration
     auto calculate_grid_dim = [] (size_t n, size_t block_dim) {
-        return (n+block_dim-1)/block_dim;
+        return (n + block_dim - 1) / block_dim;
     };
 
-    // TODO: apply stencil to the interior grid points
-    dim3 block_dim(16,16);
+    // 2D launch over the mesh; kernels guard boundaries internally
+    dim3 block_dim(16, 16);
     dim3 grid_dim(
             calculate_grid_dim(nx, block_dim.x),
             calculate_grid_dim(ny, block_dim.y));

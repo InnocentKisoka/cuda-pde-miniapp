@@ -15,7 +15,7 @@ namespace linalg {
 
 namespace kernels {
 
-// TODO implement the missing linalg kernels
+// Device BLAS-1 style kernels used by the CG solver
 __global__
 void add_scaled_diff(
         double *y,
@@ -127,9 +127,7 @@ void cg_init(int nx, int ny)
 //  blas level 1 reductions
 ////////////////////////////////////////////////////////////////////////////////
 
-// TODO implement the dot product with cublas
-// HINT : use cublas_handle() to get the cublas handle
-
+// Dot product via cuBLAS (result returned on host)
 // computes the inner product of x and y
 // x and y are vectors
 double ss_dot(Field const& x, Field const& y)
@@ -184,12 +182,7 @@ void ss_copy(Field& y, Field const& x)
         (y.device_data(), x.device_data(), n);
 }
 
-// TODO : implement the wrappers for
-// ss_fill
-// ss_axpy
-// ss_scaled_diff
-// ss_scale
-// ss_lcomb
+// Host-callable wrappers that launch the device kernels above
 
 // sets x := value
 // x is a vector
